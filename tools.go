@@ -44,7 +44,7 @@ type UploadedFile struct {
 // r: The HTTP request containing the multipart form data.
 // uploadDir: The directory where the uploaded files will be saved.
 // rename: Optional boolean indicating whether to rename the uploaded files. Defaults to true if not specified.
-// Returns a slice of pointers to UploadedFile and an error, if any occurs.
+// Returns a slice of pointers to UploadedFile and an error if any occurs.
 func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) ([]*UploadedFile, error) {
 	renameFile := true
 	if len(rename) > 0 {
