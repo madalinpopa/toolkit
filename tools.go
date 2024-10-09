@@ -82,7 +82,6 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 					return nil, err
 				}
 
-				// TODO: check to see if the file type is permitted
 				allowed := false
 				fileType := http.DetectContentType(buff)
 
