@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -68,7 +69,12 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 				if err != nil {
 					return nil, err
 				}
-				defer infile.Close()
+				defer func(infile multipart.File) {
+					err := infile.Close()
+					if err != nil {
+						fmt.Println(err)
+					}
+				}(infile)
 
 				buff := make([]byte, 512)
 				_, err = infile.Read(buff)
@@ -108,7 +114,12 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 				}
 
 				var outFile *os.File
-				defer outFile.Close()
+				defer func(outFile *os.File) {
+					err := outFile.Close()
+					if err != nil {
+						fmt.Println(err)
+					}
+				}(outFile)
 
 				if outFile, err = os.Create(filepath.Join(uploadDir, uploadedFile.NewFileName)); err != nil {
 					return nil, err
