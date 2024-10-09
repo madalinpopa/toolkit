@@ -1,12 +1,24 @@
 package toolkit
 
-import "crypto/rand"
+import (
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+)
 
 // randomSourceString is a collection of characters used as the basis for generating random strings.
 var randomSourceString = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+"
 
 // Tools is a utility type that provides various helper methods.
-type Tools struct{}
+type Tools struct {
+	MaxFileSize      int
+	AllowedFileTypes []string
+}
 
 // RandomString generates a random string of the specified length using characters from randomSourceString.
 func (t *Tools) RandomString(length int) string {
@@ -18,4 +30,103 @@ func (t *Tools) RandomString(length int) string {
 		s[i] = r[x%y]
 	}
 	return string(s)
+}
+
+// UploadedFile represents a file that has been uploaded, including its original and new names and its size.
+type UploadedFile struct {
+	NewFileName      string
+	OriginalFileName string
+	FileSize         int64
+}
+
+// UploadFiles uploads files from a multipart form request to a specified directory.
+// r: The HTTP request containing the multipart form data.
+// uploadDir: The directory where the uploaded files will be saved.
+// rename: Optional boolean indicating whether to rename the uploaded files. Defaults to true if not specified.
+// Returns a slice of pointers to UploadedFile and an error, if any occurs.
+func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) ([]*UploadedFile, error) {
+	renameFile := true
+	if len(rename) > 0 {
+		renameFile = rename[0]
+	}
+
+	var uploadedFiles []*UploadedFile
+
+	if t.MaxFileSize == 0 {
+		t.MaxFileSize = 1024 * 1024 * 1024
+	}
+	err := r.ParseMultipartForm(int64(t.MaxFileSize))
+	if err != nil {
+		return nil, errors.New("the uploaded file exceeds the maximum file size")
+	}
+
+	for _, files := range r.MultipartForm.File {
+		for _, file := range files {
+			uploadedFiles, err = func(uploadedFiles []*UploadedFile) ([]*UploadedFile, error) {
+				var uploadedFile UploadedFile
+				infile, err := file.Open()
+				if err != nil {
+					return nil, err
+				}
+				defer infile.Close()
+
+				buff := make([]byte, 512)
+				_, err = infile.Read(buff)
+				if err != nil {
+					return nil, err
+				}
+
+				// TODO: check to see if the file type is permitted
+				allowed := false
+				fileType := http.DetectContentType(buff)
+
+				if len(t.AllowedFileTypes) > 0 {
+					for _, allowedFileType := range t.AllowedFileTypes {
+						if strings.EqualFold(allowedFileType, fileType) {
+							allowed = true
+							break
+						}
+					}
+				} else {
+					allowed = true
+				}
+
+				if !allowed {
+					return nil, errors.New("the uploaded file type is not permitted")
+				}
+				_, err = infile.Seek(0, 0)
+				if err != nil {
+					return nil, err
+				}
+
+				if renameFile {
+					uploadedFile.NewFileName = fmt.Sprintf("%s.%s", t.RandomString(25), filepath.Ext(file.Filename))
+					uploadedFile.OriginalFileName = file.Filename
+				} else {
+					uploadedFile.NewFileName = file.Filename
+					uploadedFile.OriginalFileName = file.Filename
+				}
+
+				var outFile *os.File
+				defer outFile.Close()
+
+				if outFile, err = os.Create(filepath.Join(uploadDir, uploadedFile.NewFileName)); err != nil {
+					return nil, err
+				} else {
+					fileSize, err := io.Copy(outFile, infile)
+					if err != nil {
+						return nil, err
+					}
+					uploadedFile.FileSize = fileSize
+				}
+
+				uploadedFiles = append(uploadedFiles, &uploadedFile)
+				return uploadedFiles, nil
+			}(uploadedFiles)
+			if err != nil {
+				return uploadedFiles, err
+			}
+		}
+	}
+	return uploadedFiles, nil
 }
