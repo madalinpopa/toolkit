@@ -40,6 +40,20 @@ type UploadedFile struct {
 	FileSize         int64
 }
 
+func (t *Tools) UploadFile(r *http.Request, uploadDir string, rename ...bool) (*UploadedFile, error) {
+	renameFile := true
+	if len(rename) > 0 {
+		renameFile = rename[0]
+	}
+
+	files, err := t.UploadFiles(r, uploadDir, renameFile)
+	if err != nil {
+		return nil, err
+	}
+	return files[0], nil
+
+}
+
 // UploadFiles uploads files from a multipart form request to a specified directory.
 // r: The HTTP request containing the multipart form data.
 // uploadDir: The directory where the uploaded files will be saved.
@@ -72,7 +86,7 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 				defer func(infile multipart.File) {
 					err := infile.Close()
 					if err != nil {
-						fmt.Println(err)
+						fmt.Println("error closing file", err)
 					}
 				}(infile)
 
@@ -113,12 +127,6 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 				}
 
 				var outFile *os.File
-				defer func(outFile *os.File) {
-					err := outFile.Close()
-					if err != nil {
-						fmt.Println(err)
-					}
-				}(outFile)
 
 				if outFile, err = os.Create(filepath.Join(uploadDir, uploadedFile.NewFileName)); err != nil {
 					return nil, err
@@ -129,6 +137,12 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 					}
 					uploadedFile.FileSize = fileSize
 				}
+				defer func(outFile *os.File) {
+					err := outFile.Close()
+					if err != nil {
+						fmt.Println("error closing file", err)
+					}
+				}(outFile)
 
 				uploadedFiles = append(uploadedFiles, &uploadedFile)
 				return uploadedFiles, nil
