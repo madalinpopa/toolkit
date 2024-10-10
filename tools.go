@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -83,12 +82,7 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 				if err != nil {
 					return nil, err
 				}
-				defer func(infile multipart.File) {
-					err := infile.Close()
-					if err != nil {
-						fmt.Println("error closing file", err)
-					}
-				}(infile)
+				defer closer(infile)
 
 				buff := make([]byte, 512)
 				_, err = infile.Read(buff)
@@ -120,12 +114,10 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 
 				if renameFile {
 					uploadedFile.NewFileName = fmt.Sprintf("%s.%s", t.RandomString(25), filepath.Ext(file.Filename))
-					uploadedFile.OriginalFileName = file.Filename
 				} else {
 					uploadedFile.NewFileName = file.Filename
-					uploadedFile.OriginalFileName = file.Filename
 				}
-
+				uploadedFile.OriginalFileName = file.Filename
 				var outFile *os.File
 
 				if outFile, err = os.Create(filepath.Join(uploadDir, uploadedFile.NewFileName)); err != nil {
@@ -137,12 +129,7 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 					}
 					uploadedFile.FileSize = fileSize
 				}
-				defer func(outFile *os.File) {
-					err := outFile.Close()
-					if err != nil {
-						fmt.Println("error closing file", err)
-					}
-				}(outFile)
+				defer closer(outFile)
 
 				uploadedFiles = append(uploadedFiles, &uploadedFile)
 				return uploadedFiles, nil
@@ -153,4 +140,11 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 		}
 	}
 	return uploadedFiles, nil
+}
+
+func closer(c io.Closer) {
+	err := c.Close()
+	if err != nil {
+		fmt.Println("error closing file", err)
+	}
 }
